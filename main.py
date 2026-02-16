@@ -5,7 +5,7 @@ from tvDatafeed import TvDatafeed, Interval
 from datetime import datetime
 
 # 🔐 ใช้ Service Account จาก GitHub Secrets
-creds_dict = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
 gc = gspread.service_account_from_dict(creds_dict)
 
 # 📄 เปิด Google Sheet
