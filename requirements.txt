@@ -1,2 +1,4 @@
+pandas
 gspread
 google-auth
+git+https://github.com/rongardF/tvdatafeed.git
