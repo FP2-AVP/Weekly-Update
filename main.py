@@ -9,8 +9,8 @@ creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
 gc = gspread.service_account_from_dict(creds_dict)
 
 # 📄 เปิด Google Sheet
-spreadsheet_name = "TradingView_PriceData"
-sh = gc.open(spreadsheet_name)
+SPREADSHEET_ID = "1t2F5tH9t8G41qWhXEoSQFVwviIpQJ9USmRKTvtKxh8Q"  # เอาจาก URL
+sh = gc.open_by_key(SPREADSHEET_ID)
 list_sheet = sh.worksheet("Lists")
 
 symbols_list = list_sheet.get("C3:C32")
