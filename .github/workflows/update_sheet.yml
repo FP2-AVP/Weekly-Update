@@ -11,9 +11,6 @@ jobs:
   run:
     runs-on: ubuntu-latest
 
-    env:
-      GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-
     steps:
       - uses: actions/checkout@v4
 
@@ -23,6 +20,11 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      # ⭐ จุดสำคัญที่สุด
+      - name: Create credentials.json
+        run: |
+          echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > credentials.json
 
       - name: Run main script
         run: python main.py
