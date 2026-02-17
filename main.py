@@ -51,7 +51,7 @@ for s_row, n_row in zip(symbols_list, names_list):
             symbol=symbol,
             exchange="",
             interval=Interval.in_daily,
-            n_bars=1000
+            n_bars=2000
         )
 
         if df_new is None or df_new.empty:
