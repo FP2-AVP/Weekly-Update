@@ -2,4 +2,4 @@ yfinance
 pandas
 gspread
 oauth2client
-tvdatafeed
+git+https://github.com/rongardF/tvdatafeed.git
