@@ -1,4 +1,5 @@
+yfinance
 pandas
 gspread
-google-auth
-git+https://github.com/rongardF/tvdatafeed.git
+oauth2client
+tvdatafeed
