@@ -9,7 +9,7 @@ from tvDatafeed import TvDatafeed, Interval
 # ==================================================
 # CONFIG
 # ==================================================
-SPREADSHEET_ID = "PUT_YOUR_SPREADSHEET_ID_HERE"
+SPREADSHEET_ID = "1t2F5tH9t8G41qWhXEoSQFVwviIpQJ9USmRKTvtKxh8Q"
 LISTS_SHEET = "Lists"
 START_DATE = "2015-01-01"
 
