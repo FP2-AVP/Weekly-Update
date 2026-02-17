@@ -3,9 +3,9 @@ name: Update Google Sheet
 on:
   schedule:
     - cron: '0 0 * * *'
-  workflow_dispatch:        # ไว้กดรันเองใน GitHub
-  repository_dispatch:      # <--- เพิ่มส่วนนี้ เพื่อรับคำสั่งจาก Google Sheets
-    types: [trigger-from-sheets]
+  workflow_dispatch:
+  repository_dispatch:
+    types: [trigger-from-sheets] # ต้องเยื้องแบบนี้เท่านั้น
 
 jobs:
   run:
