@@ -3,7 +3,6 @@ import pandas as pd
 import gspread
 import yfinance as yf
 from tvDatafeed import TvDatafeed, Interval
-from datetime import datetime
 
 # ===============================
 # 🔐 Google Service Account
@@ -18,12 +17,13 @@ SPREADSHEET_ID = "1t2F5tH9t8G41qWhXEoSQFVwviIpQJ9USmRKTvtKxh8Q"
 sh = gc.open_by_key(SPREADSHEET_ID)
 list_sheet = sh.worksheet("Lists")
 
-symbols_list = list_sheet.get("C3:C32")
-names_list   = list_sheet.get("D3:D32")
+yahoo_symbols = list_sheet.get("C3:C32")
+tv_symbols    = list_sheet.get("D3:D32")
+sheet_names   = list_sheet.get("E3:E32")
 
 FINAL_COLS = [
     "Datetime","Symbol","Open","High","Low",
-    "Close","Volume","Date","Adj Close"
+    "Close","Volume","Date","Adj Close","Source"
 ]
 
 # ===============================
@@ -31,120 +31,126 @@ FINAL_COLS = [
 # ===============================
 tv = TvDatafeed()
 
-# ===============================
-# 📊 Yahoo Adj Close helper
-# ===============================
-def get_yahoo_adj_close(symbol, start_date):
-    try:
-        yf_symbol = symbol.replace(":", "-")
-        df = yf.download(
-            yf_symbol,
-            start=start_date.strftime("%Y-%m-%d"),
-            progress=False,
-            auto_adjust=False
-        )
-        if df.empty or "Adj Close" not in df.columns:
-            return None
-        # ใช้ index เป็น string YYYY-MM-DD เพื่อ lookup ง่าย
-        s = df["Adj Close"].copy()
-        s.index = s.index.strftime("%Y-%m-%d")
-        return s
-    except Exception:
-        return None
-
-
 print("🚀 เริ่มดึงข้อมูล (Daily)...")
 
-for s_row, n_row in zip(symbols_list, names_list):
-    if not s_row or not n_row:
+for y_row, tv_row, n_row in zip(yahoo_symbols, tv_symbols, sheet_names):
+
+    yahoo_symbol = y_row[0].strip() if y_row and y_row[0] else ""
+    tv_symbol    = tv_row[0].strip() if tv_row and tv_row[0] else ""
+    sheet_name   = n_row[0].strip() if n_row and n_row[0] else ""
+
+    if not sheet_name:
         continue
 
-    symbol = s_row[0].strip()
-    target_sheet_name = n_row[0].strip()
+    # ===============================
+    # 🧾 Worksheet
+    # ===============================
+    try:
+        worksheet = sh.worksheet(sheet_name)
+    except gspread.exceptions.WorksheetNotFound:
+        worksheet = sh.add_worksheet(
+            title=sheet_name, rows="2000", cols="25"
+        )
+        worksheet.update("A1:J1", [FINAL_COLS])
+
+    existing = worksheet.get_all_values()
+    last_date = (
+        pd.to_datetime(
+            pd.DataFrame(existing[1:], columns=existing[0])["Datetime"]
+        ).max()
+        if len(existing) > 1 else None
+    )
 
     try:
-        # ===============================
-        # 🧾 Worksheet
-        # ===============================
-        try:
-            worksheet = sh.worksheet(target_sheet_name)
-        except gspread.exceptions.WorksheetNotFound:
-            worksheet = sh.add_worksheet(
-                title=target_sheet_name, rows="2000", cols="25"
+        # ==================================================
+        # 🟢 SOURCE = YAHOO
+        # ==================================================
+        if yahoo_symbol:
+            print(f"📊 {sheet_name}: Yahoo ({yahoo_symbol})")
+
+            df = yf.download(
+                yahoo_symbol,
+                start="2010-01-01",
+                progress=False,
+                auto_adjust=False
             )
-            worksheet.update("A1:I1", [FINAL_COLS])
 
-        existing = worksheet.get_all_values()
-        last_date = (
-            pd.to_datetime(
-                pd.DataFrame(existing[1:], columns=existing[0])["Datetime"]
-            ).max()
-            if len(existing) > 1 else None
-        )
+            if df.empty:
+                continue
 
-        # ===============================
-        # 📥 TradingView data
-        # ===============================
-        df_new = tv.get_hist(
-            symbol=symbol,
-            exchange="",
-            interval=Interval.in_daily,
-            n_bars=2000
-        )
+            df = df.reset_index()
 
-        if df_new is None or df_new.empty:
+            if last_date is not None:
+                df = df[df["Date"] > last_date]
+
+            if df.empty:
+                continue
+
+            data = []
+            for _, r in df.iterrows():
+                data.append([
+                    r["Date"].strftime("%Y-%m-%d 00:00:00"),
+                    yahoo_symbol,
+                    float(r["Open"]),
+                    float(r["High"]),
+                    float(r["Low"]),
+                    float(r["Close"]),
+                    int(r["Volume"]) if not pd.isna(r["Volume"]) else 0,
+                    r["Date"].strftime("%Y-%m-%d"),
+                    float(r["Adj Close"]),
+                    "YAHOO"
+                ])
+
+        # ==================================================
+        # 🔵 SOURCE = TRADINGVIEW
+        # ==================================================
+        elif tv_symbol:
+            print(f"📈 {sheet_name}: TradingView ({tv_symbol})")
+
+            df = tv.get_hist(
+                symbol=tv_symbol,
+                exchange="",
+                interval=Interval.in_daily,
+                n_bars=2000
+            )
+
+            if df is None or df.empty:
+                continue
+
+            df = df.reset_index()
+
+            if last_date is not None:
+                df = df[df["datetime"] > last_date]
+
+            if df.empty:
+                continue
+
+            data = []
+            for _, r in df.iterrows():
+                data.append([
+                    r["datetime"].strftime("%Y-%m-%d %H:%M:%S"),
+                    tv_symbol,
+                    float(r["open"]),
+                    float(r["high"]),
+                    float(r["low"]),
+                    float(r["close"]),
+                    int(r["volume"]) if not pd.isna(r["volume"]) else 0,
+                    r["datetime"].strftime("%Y-%m-%d"),
+                    float(r["close"]),   # no adj from TV
+                    "TV"
+                ])
+
+        else:
             continue
 
-        df_new = df_new.reset_index()
-
-        if last_date is not None:
-            df_new = df_new[df_new["datetime"] > last_date]
-
-        if df_new.empty:
-            continue
-
         # ===============================
-        # 📊 Yahoo Adj Close
+        # 📤 Append
         # ===============================
-        start_date = df_new["datetime"].min()
-        adj_series = get_yahoo_adj_close(symbol, start_date)
-
-        # ===============================
-        # 📤 Prepare rows (SAFE TYPES ONLY)
-        # ===============================
-        data = []
-
-        for _, r in df_new.iterrows():
-            date_key = r["datetime"].strftime("%Y-%m-%d")
-
-            # default fallback
-            adj_close = float(r["close"])
-
-            if adj_series is not None:
-                try:
-                    val = adj_series.get(date_key)
-                    if pd.notna(val):
-                        adj_close = float(val)
-                except Exception:
-                    adj_close = float(r["close"])
-
-            data.append([
-                r["datetime"].strftime("%Y-%m-%d %H:%M:%S"),  # str
-                str(symbol),
-                float(r["open"]),
-                float(r["high"]),
-                float(r["low"]),
-                float(r["close"]),
-                int(r["volume"]) if not pd.isna(r["volume"]) else 0,
-                date_key,                                    # str
-                float(adj_close)
-            ])
-
         worksheet.append_rows(data, value_input_option="USER_ENTERED")
-        print(f"✅ {symbol}: เพิ่ม {len(data)} แถว")
+        print(f"✅ {sheet_name}: เพิ่ม {len(data)} แถว")
 
     except Exception as e:
-        print(f"❌ {symbol} error: {e}")
+        print(f"❌ {sheet_name} error: {e}")
 
     time.sleep(1)
 
