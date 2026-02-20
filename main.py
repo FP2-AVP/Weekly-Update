@@ -72,7 +72,7 @@ for i, (s_row, n_row) in enumerate(zip(symbols_list, names_list), start=3):
         df_new = tv.get_hist(
             symbol=symbol,
             exchange="",
-            interval=Interval.in_daily,
+            interval=Interval.in_weekly,
             n_bars=2000  # ปรับจำนวนแท่งเทียนที่ต้องการดึงย้อนหลัง
         )
 
