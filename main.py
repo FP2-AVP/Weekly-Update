@@ -1,139 +1,83 @@
-import gspread
+import json, os, time
 import pandas as pd
-from oauth2client.service_account import ServiceAccountCredentials
+import gspread
 from tvDatafeed import TvDatafeed, Interval
-import yfinance as yf
 from datetime import datetime
 
-# ==============================
-# CONFIG
-# ==============================
-SPREADSHEET_NAME = "TradingView_PriceData"
-LIST_SHEET = "Lists"
+# 🔐 ใช้ Service Account จาก GitHub Secrets
+creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+gc = gspread.service_account_from_dict(creds_dict)
 
-# ==============================
-# GOOGLE SHEETS AUTH
-# ==============================
-scope = [
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive"
+# 📄 เปิด Google Sheet
+SPREADSHEET_ID = "1t2F5tH9t8G41qWhXEoSQFVwviIpQJ9USmRKTvtKxh8Q"  # เอาจาก URL
+sh = gc.open_by_key(SPREADSHEET_ID)
+list_sheet = sh.worksheet("Lists")
+
+symbols_list = list_sheet.get("C3:C32")
+names_list = list_sheet.get("D3:D32")
+
+FINAL_COLS = [
+    "Datetime","Symbol","Open","High","Low",
+    "Close","Volume","Date","Adj Close"
 ]
-creds = ServiceAccountCredentials.from_json_keyfile_name(
-    "credentials.json", scope
-)
-gc = gspread.authorize(creds)
-spreadsheet = gc.open(SPREADSHEET_NAME)
 
-# ==============================
-# TVDATAFEED
-# ==============================
-tv = TvDatafeed()  # anonymous login
+tv = TvDatafeed()
 
-# ==============================
-# HELPERS
-# ==============================
-def safe_date(df):
-    df = df.copy()
-    if isinstance(df.index, pd.DatetimeIndex):
-        df["date"] = df.index.strftime("%Y-%m-%d")
-        df.reset_index(drop=True, inplace=True)
-    return df
+print("🚀 เริ่มดึงข้อมูล (Daily)...")
 
-def upload_to_sheet(sheet_name, df):
+for s_row, n_row in zip(symbols_list, names_list):
+    if not s_row or not n_row:
+        continue
+
+    symbol = s_row[0].strip()
+    target_sheet_name = n_row[0].strip()
+
     try:
-        worksheet = spreadsheet.worksheet(sheet_name)
-        worksheet.clear()
-    except gspread.exceptions.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(
-            title=sheet_name,
-            rows=str(len(df) + 5),
-            cols=str(len(df.columns) + 5)
+        try:
+            worksheet = sh.worksheet(target_sheet_name)
+        except gspread.exceptions.WorksheetNotFound:
+            worksheet = sh.add_worksheet(
+                title=target_sheet_name, rows="2000", cols="25"
+            )
+            worksheet.update("A1:I1", [FINAL_COLS])
+
+        existing = worksheet.get_all_values()
+        last_date = (
+            pd.to_datetime(pd.DataFrame(existing[1:], columns=existing[0])["Datetime"]).max()
+            if len(existing) > 1 else None
         )
 
-    worksheet.update(
-        [df.columns.tolist()] + df.astype(str).values.tolist()
-    )
+        df_new = tv.get_hist(
+            symbol=symbol,
+            exchange="",
+            interval=Interval.in_daily,
+            n_bars=2000
+        )
 
-# ==============================
-# FETCH FROM YAHOO
-# ==============================
-def fetch_yahoo(symbol):
-    df = yf.download(symbol, auto_adjust=False, progress=False)
-
-    if df.empty or "Adj Close" not in df.columns:
-        return None
-
-    df = df[["Open", "High", "Low", "Close", "Adj Close", "Volume"]]
-    df = safe_date(df)
-    df["source"] = "yahoo"
-    return df
-
-# ==============================
-# FETCH FROM TRADINGVIEW
-# ==============================
-def fetch_tradingview(symbol):
-    try:
-        exchange, ticker = symbol.split(":")
-    except ValueError:
-        return None
-
-    df = tv.get_hist(
-        symbol=ticker,
-        exchange=exchange,
-        interval=Interval.in_daily,
-        n_bars=5000
-    )
-
-    if df is None or df.empty:
-        return None
-
-    df = df.rename(columns={
-        "open": "Open",
-        "high": "High",
-        "low": "Low",
-        "close": "Close",
-        "volume": "Volume"
-    })
-
-    df = df[["Open", "High", "Low", "Close", "Volume"]]
-    df["Adj Close"] = df["Close"]  # TradingView ไม่มี adj
-    df = safe_date(df)
-    df["source"] = "tradingview"
-    return df
-
-# ==============================
-# MAIN
-# ==============================
-def main():
-    list_ws = spreadsheet.worksheet(LIST_SHEET)
-    rows = list_ws.get_all_records()
-
-    for row in rows:
-        yahoo_symbol = row.get("Yahoo Symbol")
-        tv_symbol = row.get("TradingView Symbol")
-        sheet_name = row.get("Sheet Name")
-
-        print(f"📥 {sheet_name}")
-
-        df = None
-
-        # 1) Try Yahoo
-        if yahoo_symbol:
-            df = fetch_yahoo(yahoo_symbol)
-
-        # 2) Fallback TradingView
-        if df is None and tv_symbol:
-            df = fetch_tradingview(tv_symbol)
-
-        if df is None:
-            print(f"⚠️ {sheet_name}: ไม่มีข้อมูล")
+        if df_new is None or df_new.empty:
             continue
 
-        upload_to_sheet(sheet_name, df)
-        print(f"✅ {sheet_name}: {len(df)} rows")
+        df_new = df_new.reset_index()
+        if last_date is not None:
+            df_new = df_new[df_new["datetime"] > last_date]
 
-    print("✨ เสร็จสิ้น")
+        if df_new.empty:
+            continue
 
-# ==============================
-if __name__ == "__main__":
-    main()
+        data = [[
+            r["datetime"].strftime("%Y-%m-%d %H:%M:%S"),
+            symbol, r["open"], r["high"],
+            r["low"], r["close"], r["volume"],
+            r["datetime"].strftime("%Y-%m-%d"),
+            r["close"]
+        ] for _, r in df_new.iterrows()]
+
+        worksheet.append_rows(data, value_input_option="USER_ENTERED")
+        print(f"✅ {symbol}: เพิ่ม {len(data)} แถว")
+
+    except Exception as e:
+        print(f"❌ {symbol} error: {e}")
+
+    time.sleep(1)
+
+print("✨ เสร็จสิ้น")
