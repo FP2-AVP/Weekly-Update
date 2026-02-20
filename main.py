@@ -73,7 +73,7 @@ for i, (s_row, n_row) in enumerate(zip(symbols_list, names_list), start=3):
             symbol=symbol,
             exchange="",
             interval=Interval.in_daily,
-            n_bars=500  # ปรับจำนวนแท่งเทียนที่ต้องการดึงย้อนหลัง
+            n_bars=2000  # ปรับจำนวนแท่งเทียนที่ต้องการดึงย้อนหลัง
         )
 
         if df_new is None or df_new.empty:
