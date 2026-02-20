@@ -3,13 +3,16 @@ name: Update Google Sheet
 on:
   schedule:
     - cron: '0 0 * * *'
-  workflow_dispatch:
-  repository_dispatch:
+  workflow_dispatch:        # ไว้กดรันเองใน GitHub
+  repository_dispatch:      # <--- เพิ่มส่วนนี้ เพื่อรับคำสั่งจาก Google Sheets
     types: [trigger-from-sheets]
 
 jobs:
   run:
     runs-on: ubuntu-latest
+
+    env:
+      GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
 
     steps:
       - uses: actions/checkout@v4
@@ -18,13 +21,6 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt
 
-      # ⭐ จุดสำคัญที่สุด
-      - name: Create credentials.json
-        run: |
-          echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > credentials.json
-
-      - name: Run main script
-        run: python main.py
+      - run: python main.py
