@@ -21,7 +21,7 @@ names_list = list_sheet.get("E3:E32")
 
 FINAL_COLS = ["Datetime", "Symbol", "Open", "High", "Low", "Close", "Volume", "Date", "Adj Close"]
 
-print("🚀 เริ่มดึงข้อมูล (Deep Check for Adj Close)...")
+print("🚀 เริ่มดึงข้อมูล (Deep Extraction Mode)...")
 
 for i, (s_row, n_row) in enumerate(zip(symbols_list, names_list), start=3):
     if not s_row or not n_row or not s_row[0].strip() or not n_row[0].strip():
@@ -30,7 +30,7 @@ for i, (s_row, n_row) in enumerate(zip(symbols_list, names_list), start=3):
     symbol = s_row[0].strip()
     target_sheet_name = n_row[0].strip()
     
-    # หุ้นไทยใช้ .BK, สิงคโปร์ใช้ .SI, อเมริกาไม่ต้องเติม
+    # ปรับชื่อหุ้นสำหรับ Yahoo Finance
     api_symbol = symbol.replace(".BKK", ".BK")
 
     print(f"🔍 กำลังจัดการ: {api_symbol}")
@@ -40,73 +40,82 @@ for i, (s_row, n_row) in enumerate(zip(symbols_list, names_list), start=3):
         try:
             worksheet = sh.worksheet(target_sheet_name)
         except gspread.exceptions.WorksheetNotFound:
-            worksheet = sh.add_worksheet(title=target_sheet_name, rows="2000", cols="25")
+            print(f"🆕 สร้างชีทใหม่: {target_sheet_name}")
+            worksheet = sh.add_worksheet(title=target_sheet_name, rows="5000", cols="25")
             worksheet.update(values=[FINAL_COLS], range_name="A1:I1")
 
+        # เช็ควันที่ล่าสุดในชีท
         existing = worksheet.get_all_values()
         last_date = None
         if len(existing) > 1:
             df_existing = pd.DataFrame(existing[1:], columns=existing[0])
             last_date = pd.to_datetime(df_existing["Date"], errors='coerce').max()
 
-        # --- 📈 2. ดึงข้อมูล (ตั้งค่าดึงปันผลมาคำนวณด้วย) ---
-        # auto_adjust=False สำคัญมากเพื่อให้ Adj Close แยกออกมา
-        df_new = yf.download(api_symbol, period="1mo", interval="1d", auto_adjust=False, progress=False)
+        # --- 📈 2. ดึงข้อมูล (เปลี่ยนเป็นย้อนหลังยาวขึ้น) ---
+        # ใช้ period="max" เพื่อเอาข้อมูลทั้งหมด หรือ "1y" เพื่อเอา 1 ปี
+        df_new = yf.download(api_symbol, period="max", interval="1d", auto_adjust=False, progress=False)
 
         if df_new.empty:
             print(f"⚠️ {api_symbol}: ไม่พบข้อมูล")
             continue
 
-        # แก้ปัญหา Multi-index ที่ทำให้เข้าถึง Adj Close ไม่ได้
+        # แก้ปัญหา Multi-index (หัวตารางซ้อนกัน)
         if isinstance(df_new.columns, pd.MultiIndex):
             df_new.columns = df_new.columns.get_level_values(0)
 
         df_new = df_new.reset_index()
         df_new['Date'] = pd.to_datetime(df_new['Date']).dt.tz_localize(None)
 
+        # กรองเอาเฉพาะข้อมูลที่ใหม่กว่าวันล่าสุดใน Sheet
         if last_date is not None:
             df_new = df_new[df_new["Date"] > last_date]
 
         if df_new.empty:
-            print(f"😴 {api_symbol}: ไม่มีข้อมูลใหม่")
+            print(f"😴 {api_symbol}: ข้อมูลล่าสุดอยู่แล้ว")
             continue
 
         # --- 3. เตรียมข้อมูลเข้า Sheet ---
         data_to_append = []
         for _, r in df_new.iterrows():
-            # ตรวจสอบว่ามีคอลัมน์ 'Adj Close' หรือไม่ ถ้าไม่มีให้ใช้ 'Close' แทน
-            # ป้องกันปัญหาหุ้นบางตลาดที่ Yahoo ไม่คำนวณ Adj ให้
-            adj_val = r.get("Adj Close", r.get("Close"))
-            
-            # แปลงเป็น float แบบดึงค่าจาก Scalar (แก้ปัญหา FutureWarning)
+            # ดึงค่าแบบตรวจสอบว่าเป็น Scalar หรือไม่ (ป้องกัน Error strftime/float)
             try:
-                # กรณีเป็น Series ให้ดึงค่าแรก ถ้าเป็นเลขปกติใช้ได้เลย
-                adj_price = float(adj_val.iloc[0]) if hasattr(adj_val, "iloc") else float(adj_val)
-                close_price = float(r["Close"].iloc[0]) if hasattr(r["Close"], "iloc") else float(r["Close"])
-                
+                # ดึงค่าด้วย .item() เพื่อเอาค่าเดี่ยวๆ ออกมาจาก Series/Array
                 dt_obj = r["Date"]
+                op = float(r["Open"])
+                hi = float(r["High"])
+                lo = float(r["Low"])
+                cl = float(r["Close"])
+                vo = int(r["Volume"])
+                ad = float(r["Adj Close"])
+
+                # ตรวจสอบค่าว่าง (NaN)
+                if pd.isna(ad): ad = cl
+
                 data_to_append.append([
                     dt_obj.strftime("%Y-%m-%d 00:00:00"),
                     symbol,
-                    round(float(r["Open"]), 4),
-                    round(float(r["High"]), 4),
-                    round(float(r["Low"]), 4),
-                    round(close_price, 4),
-                    int(r["Volume"]),
+                    round(op, 4),
+                    round(hi, 4),
+                    round(lo, 4),
+                    round(cl, 4),
+                    vo,
                     dt_obj.strftime("%Y-%m-%d"),
-                    round(adj_price, 4)
+                    round(ad, 4)
                 ])
             except:
                 continue
 
         if data_to_append:
-            worksheet.append_rows(data_to_append, value_input_option="USER_ENTERED")
-            print(f"✅ {api_symbol}: ดึงค่าสำเร็จ (Adj Close: {data_to_append[-1][-1]})")
+            # ใช้การแบ่งส่งทีละ 500 แถวเพื่อป้องกัน Google Sheets Time out
+            for chunk in [data_to_append[x:x+500] for x in range(0, len(data_to_append), 500)]:
+                worksheet.append_rows(chunk, value_input_option="USER_ENTERED")
+                time.sleep(1)
+            print(f"✅ {api_symbol}: อัปเดตเพิ่ม {len(data_to_append)} แถว")
 
     except Exception as e:
-        print(f"❌ {api_symbol} ข้อผิดพลาด: {e}")
+        print(f"❌ {api_symbol} Error: {e}")
 
     time.sleep(1)
 
 print("-" * 30)
-print("✨ อัปเดตเรียบร้อย!")
+print("✨ ภารกิจเสร็จสิ้น!")
