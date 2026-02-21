@@ -112,4 +112,4 @@ for i, (s_row, n_row) in enumerate(zip(symbols_list, names_list), start=3):
         time.sleep(5)
 
 print("-" * 30)
-print("✨ ภารกิจเสร็จสิ้น!"
+print("✨ ภารกิจเสร็จสิ้น!")
