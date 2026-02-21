@@ -11,7 +11,7 @@ try:
     gc = gspread.service_account_from_dict(creds_dict)
     
     # สำหรับ Alpha Vantage
-    API_KEY = os.environ.get("ALPHA_VANTAGE_API_KEY")
+    API_KEY = os.environ.get("7Y6MI3WL8VBWXNLK")
     if not API_KEY:
         raise KeyError("ไม่พบ ALPHA_VANTAGE_API_KEY")
 except KeyError as e:
