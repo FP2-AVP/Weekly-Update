@@ -53,7 +53,7 @@ for i, (s_row, n_row) in enumerate(zip(symbols_list, names_list), start=3):
 
         # --- 📈 2. ดึงข้อมูล (เปลี่ยนเป็นย้อนหลังยาวขึ้น) ---
         # ใช้ period="max" เพื่อเอาข้อมูลทั้งหมด หรือ "1y" เพื่อเอา 1 ปี
-        df_new = yf.download(api_symbol, period="max", interval="1d", auto_adjust=False, progress=False)
+        df_new = yf.download(api_symbol, period="max", interval="1wk", auto_adjust=False, progress=False)
 
         if df_new.empty:
             print(f"⚠️ {api_symbol}: ไม่พบข้อมูล")
