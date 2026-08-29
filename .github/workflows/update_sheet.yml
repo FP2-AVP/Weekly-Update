@@ -4,15 +4,11 @@ on:
   schedule:
     - cron: '0 0 * * *'
   workflow_dispatch:        # ไว้กดรันเองใน GitHub
-  repository_dispatch:      # <--- เพิ่มส่วนนี้ เพื่อรับคำสั่งจาก Google Sheets
-    types: [trigger-from-sheets]
+  repository_dispatch:      # รับคำสั่งยิง Webhook จาก Google Sheets
 
 jobs:
   run:
     runs-on: ubuntu-latest
-
-    env:
-      GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
 
     steps:
       - uses: actions/checkout@v4
@@ -24,3 +20,7 @@ jobs:
       - run: pip install -r requirements.txt
 
       - run: python main.py
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          PARENT_FOLDER_ID: ${{ secrets.PARENT_FOLDER_ID }}
+          SPREADSHEET_NAME: ${{ secrets.SPREADSHEET_NAME }}
