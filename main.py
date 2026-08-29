@@ -87,7 +87,14 @@ def number(value):
 
 
 def ocr_text(reader, image):
-    return " ".join(reader.readtext(image, detail=0)).replace("−", "-")
+    text = " ".join(reader.readtext(image, detail=0))
+    # EasyOCR may represent the minus sign as Unicode minus/dashes or tilde.
+    return (
+        text.replace("−", "-")
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace("~", "-")
+    )
 
 
 def extract_colored_number(hsv_image, reader, lower_hsv, upper_hsv):
@@ -180,7 +187,16 @@ def parse_chart_data(reader, image_bytes):
             data["SMA20"] = data["SMA20"] or number(values[0])
             data["SMA40"] = data["SMA40"] or number(values[1])
 
-    required = ["OPEN", "HIGH", "LOW", "CLOSE", "SMA20", "SMA40"]
+    required = [
+        "OPEN",
+        "HIGH",
+        "LOW",
+        "CLOSE",
+        "CHANGE",
+        "CHANGE_PCT",
+        "SMA20",
+        "SMA40",
+    ]
     missing = [key for key in required if data[key] is None]
     if missing:
         raise ValueError(f"OCR อ่านค่าไม่ครบ: {', '.join(missing)}")
@@ -255,8 +271,21 @@ def main():
 
         existing_row = find_date_row(worksheet, folder_date)
         if existing_row:
-            print(f"ข้าม {asset}: มีวันที่ {display_date} ที่แถว {existing_row} แล้ว")
-            continue
+            existing_values = worksheet.get(f"C{existing_row}:J{existing_row}")
+            existing_values = existing_values[0] if existing_values else []
+            is_complete = len(existing_values) == 8 and all(
+                value not in (None, "") for value in existing_values
+            )
+            if is_complete:
+                print(
+                    f"ข้าม {asset}: มีข้อมูลครบของวันที่ {display_date} "
+                    f"ที่แถว {existing_row} แล้ว"
+                )
+                continue
+            print(
+                f"ซ่อม {asset}: วันที่ {display_date} แถว {existing_row} "
+                "ยังมีข้อมูลว่าง"
+            )
 
         print(f"กำลังอ่าน {asset}: {filename}")
         parsed = parse_chart_data(
@@ -274,8 +303,16 @@ def main():
             parsed["SMA20"],
             parsed["SMA40"],
         ]
-        worksheet.append_row(row, value_input_option="USER_ENTERED")
-        new_row = len(worksheet.col_values(1))
+        if existing_row:
+            worksheet.update(
+                values=[row],
+                range_name=f"A{existing_row}:J{existing_row}",
+                value_input_option="USER_ENTERED",
+            )
+            new_row = existing_row
+        else:
+            worksheet.append_row(row, value_input_option="USER_ENTERED")
+            new_row = len(worksheet.col_values(1))
         worksheet.format(
             f"A{new_row}", {"numberFormat": {"type": "DATE", "pattern": "dd/mm/yyyy"}}
         )
