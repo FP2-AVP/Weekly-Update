@@ -84,7 +84,7 @@ def get_latest_date_folder(drive_service, parent_id):
 
 def download_image_as_bytes(drive_service, file_id):
   """ดาวน์โหลดรูปภาพเข้า Memory โดยตรง"""
-  request = drive_service.files().get_media(file_id=file_id)
+  request = drive_service.files().get_media(fileId=file_id)
   fh = io.BytesIO()
   downloader = MediaIoBaseDownload(fh, request)
   done = False
