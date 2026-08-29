@@ -132,18 +132,19 @@ def parse_chart_data(reader, image_bytes):
         "SMA40": None,
     }
 
-    ohlc_pattern = re.compile(
-        r"\bO\s*([\d,.]+).*?"
-        r"\bH\s*([\d,.]+).*?"
-        r"\bL\s*([\d,.]+).*?"
-        r"\bC\s*([\d,.]+)",
-        re.IGNORECASE,
-    )
-    ohlc_match = ohlc_pattern.search(ohlc_text)
-    if ohlc_match:
-        data["OPEN"], data["HIGH"], data["LOW"], data["CLOSE"] = [
-            number(value) for value in ohlc_match.groups()
-        ]
+    # EasyOCR commonly reads the OPEN label O as the digit 0, producing
+    # strings such as "0160.50 H162.31 L159.82 C161.09". Parse each field
+    # independently so one missed label does not discard the other values.
+    field_patterns = {
+        "OPEN": r"(?<![A-Z0-9])[O0]\s*[:=]?\s*([\d,.]+)",
+        "HIGH": r"(?<![A-Z0-9])H\s*[:=]?\s*([\d,.]+)",
+        "LOW": r"(?<![A-Z0-9])L\s*[:=]?\s*([\d,.]+)",
+        "CLOSE": r"(?<![A-Z0-9])C\s*[:=]?\s*([\d,.]+)",
+    }
+    for key, pattern in field_patterns.items():
+        match = re.search(pattern, ohlc_text, re.IGNORECASE)
+        if match:
+            data[key] = number(match.group(1))
 
     change_match = re.search(
         r"([+-]\s*[\d,.]+)\s*\(\s*([+-]?\s*[\d,.]+)\s*%\s*\)",
