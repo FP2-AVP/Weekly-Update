@@ -135,11 +135,13 @@ def parse_chart_data(reader, image_bytes):
     # EasyOCR commonly reads the OPEN label O as the digit 0, producing
     # strings such as "0160.50 H162.31 L159.82 C161.09". Parse each field
     # independently so one missed label does not discard the other values.
+    # Also accept OCR output without a leading zero, e.g. L.803 for L0.803.
+    numeric_token = r"((?:\d[\d,.]*|\.\d+))"
     field_patterns = {
-        "OPEN": r"(?<![A-Z0-9])[O0]\s*[:=]?\s*([\d,.]+)",
-        "HIGH": r"(?<![A-Z0-9])H\s*[:=]?\s*([\d,.]+)",
-        "LOW": r"(?<![A-Z0-9])L\s*[:=]?\s*([\d,.]+)",
-        "CLOSE": r"(?<![A-Z0-9])C\s*[:=]?\s*([\d,.]+)",
+        "OPEN": rf"(?<![A-Z0-9])[O0]\s*[:=]?\s*{numeric_token}",
+        "HIGH": rf"(?<![A-Z0-9])H\s*[:=]?\s*{numeric_token}",
+        "LOW": rf"(?<![A-Z0-9])L\s*[:=]?\s*{numeric_token}",
+        "CLOSE": rf"(?<![A-Z0-9])C\s*[:=]?\s*{numeric_token}",
     }
     for key, pattern in field_patterns.items():
         match = re.search(pattern, ohlc_text, re.IGNORECASE)
