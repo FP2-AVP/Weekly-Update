@@ -77,6 +77,8 @@ def download_image_as_bytes(drive_service, file_id):
 def number(value):
     if value is None:
         return None
+    # In a numeric position EasyOCR may confuse zero with the letter O.
+    value = value.replace("O", "0").replace("o", "0")
     cleaned = re.sub(r"[^0-9.+-]", "", value.replace(",", ""))
     try:
         return float(cleaned)
@@ -135,8 +137,8 @@ def parse_chart_data(reader, image_bytes):
     # EasyOCR commonly reads the OPEN label O as the digit 0, producing
     # strings such as "0160.50 H162.31 L159.82 C161.09". Parse each field
     # independently so one missed label does not discard the other values.
-    # Also accept OCR output without a leading zero, e.g. L.803 for L0.803.
-    numeric_token = r"((?:\d[\d,.]*|\.\d+))"
+    # Accept L.803, L0.803 and LO.803 (letter O misread for zero).
+    numeric_token = r"((?:[0O]?[.,]\d+|\d[\d,.]*))"
     field_patterns = {
         "OPEN": rf"(?<![A-Z0-9])[O0]\s*[:=]?\s*{numeric_token}",
         "HIGH": rf"(?<![A-Z0-9])H\s*[:=]?\s*{numeric_token}",
