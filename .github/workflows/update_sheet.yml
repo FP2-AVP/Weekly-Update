@@ -1,12 +1,12 @@
 name: Update Google Sheet
 
 on:
-  workflow_dispatch:
   repository_dispatch:
     types: [trigger-from-sheets]
+  workflow_dispatch:
 
 jobs:
-  run:
+  run-ocr:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,7 +21,7 @@ jobs:
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
-      - name: Run Main Script
+      - name: Run OCR Script
         env:
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           PARENT_FOLDER_ID: ${{ secrets.PARENT_FOLDER_ID }}
