@@ -1,26 +1,29 @@
 name: Update Google Sheet
 
 on:
-  schedule:
-    - cron: '0 0 * * *'
-  workflow_dispatch:        # ไว้กดรันเองใน GitHub
-  repository_dispatch:      # รับคำสั่งยิง Webhook จาก Google Sheets
+  workflow_dispatch:
+  repository_dispatch:
+    types: [trigger-from-sheets]
 
 jobs:
   run:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - run: pip install -r requirements.txt
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
 
-      - run: python main.py
+      - name: Run Main Script
         env:
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           PARENT_FOLDER_ID: ${{ secrets.PARENT_FOLDER_ID }}
           SPREADSHEET_NAME: ${{ secrets.SPREADSHEET_NAME }}
+        run: python main.py
