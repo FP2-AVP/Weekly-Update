@@ -1,65 +1,86 @@
 name: Run Python OCR
 
 on:
-  # เรียกจาก Google Apps Script
+  # รับคำสั่งจาก Google Apps Script
   repository_dispatch:
     types:
       - trigger-from-sheets
 
-  # กดทดสอบด้วยตนเองจากหน้า GitHub Actions
+  # สำหรับกดทดสอบจากหน้า GitHub Actions
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# ป้องกัน OCR หลายรอบทำงานพร้อมกัน
+# หากกดซ้ำ รอบถัดไปจะรอ ไม่แย่ง Google Sheets API quota
 concurrency:
-  group: weekly-update-ocr
+  group: weekly-update-python-ocr
   cancel-in-progress: false
 
 jobs:
   run-ocr:
     name: Run OCR
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
-      # 1. ดาวน์โหลดไฟล์ใน Repository มายัง GitHub Runner
+      # 1. โหลดไฟล์จาก Repository
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # 2. ติดตั้ง Python
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: requirements.txt
 
-      # 3. ติดตั้ง Python packages
+      # 3. ติดตั้ง packages
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install -r requirements.txt
 
-      # 4. สร้าง credentials.json จาก GitHub Secret
-      - name: Create Google credentials file
+      # 4. ตรวจสอบว่ามี Secrets ครบ
+      - name: Validate configuration
         env:
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          PARENT_FOLDER_ID: ${{ secrets.PARENT_FOLDER_ID }}
+          SPREADSHEET_NAME: ${{ secrets.SPREADSHEET_NAME }}
         run: |
           if [ -z "$GOOGLE_CREDENTIALS_JSON" ]; then
-            echo "::error::ไม่พบ GitHub Secret ชื่อ GOOGLE_CREDENTIALS_JSON"
+            echo "::error::ไม่พบ Repository Secret: GOOGLE_CREDENTIALS_JSON"
             exit 1
           fi
 
-          printf '%s' "$GOOGLE_CREDENTIALS_JSON" > credentials.json
+          if [ -z "$PARENT_FOLDER_ID" ]; then
+            echo "::error::ไม่พบ Repository Secret: PARENT_FOLDER_ID"
+            exit 1
+          fi
 
+          if [ -z "$SPREADSHEET_NAME" ]; then
+            echo "::error::ไม่พบ Repository Secret: SPREADSHEET_NAME"
+            exit 1
+          fi
+
+          echo "พบ Secrets ที่จำเป็นครบแล้ว"
+
+      # 5. ตรวจสอบว่า Service Account JSON ถูกต้อง
+      - name: Validate Google credentials JSON
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+        run: |
           python -c "
           import json
+          import os
 
-          with open('credentials.json', 'r', encoding='utf-8') as file:
-              credentials = json.load(file)
+          credentials = json.loads(
+              os.environ['GOOGLE_CREDENTIALS_JSON']
+          )
 
-          required_fields = [
+          required = [
               'type',
               'project_id',
               'private_key',
@@ -68,9 +89,9 @@ jobs:
           ]
 
           missing = [
-              field
-              for field in required_fields
-              if not credentials.get(field)
+              key
+              for key in required
+              if not credentials.get(key)
           ]
 
           if missing:
@@ -79,37 +100,14 @@ jobs:
                   ', '.join(missing)
               )
 
-          print('Google credentials JSON is valid')
+          print('Google credentials JSON ถูกต้อง')
           "
 
-      # 5. ตรวจสอบ Secrets ที่โปรแกรมจำเป็นต้องใช้
-      - name: Validate configuration
-        env:
-          PARENT_FOLDER_ID: ${{ secrets.PARENT_FOLDER_ID }}
-          SPREADSHEET_NAME: ${{ secrets.SPREADSHEET_NAME }}
-        run: |
-          if [ -z "$PARENT_FOLDER_ID" ]; then
-            echo "::error::ไม่พบ GitHub Secret ชื่อ PARENT_FOLDER_ID"
-            exit 1
-          fi
-
-          if [ -z "$SPREADSHEET_NAME" ]; then
-            echo "::error::ไม่พบ GitHub Secret ชื่อ SPREADSHEET_NAME"
-            exit 1
-          fi
-
-          echo "Required configuration is available"
-
-      # 6. รันโปรแกรม OCR
+      # 6. รัน OCR และบันทึก Google Sheets
       - name: Run OCR
         env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           PARENT_FOLDER_ID: ${{ secrets.PARENT_FOLDER_ID }}
           SPREADSHEET_NAME: ${{ secrets.SPREADSHEET_NAME }}
-          GOOGLE_APPLICATION_CREDENTIALS: credentials.json
           PYTHONUNBUFFERED: "1"
         run: python main.py
-
-      # 7. ลบไฟล์ credentials หลังทำงานเสร็จ
-      - name: Remove credentials file
-        if: always()
-        run: rm -f credentials.json
