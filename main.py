@@ -4,7 +4,7 @@ import io
 import json
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 
 import cv2
 import easyocr
@@ -222,6 +222,9 @@ def main():
 
     date_object = datetime.strptime(folder_date, "%Y%m%d")
     display_date = date_object.strftime("%d/%m/%Y")
+    # Google Sheets stores dates as day serials. Sending a number avoids
+    # dd/mm vs mm/dd locale ambiguity while keeping the cell a real DATE.
+    date_serial = (date_object.date() - date(1899, 12, 30)).days
     print(f"พบโฟลเดอร์ล่าสุด: {folder_date}")
 
     query = f"'{folder_id}' in parents and mimeType contains 'image/' and trashed = false"
@@ -258,7 +261,7 @@ def main():
             reader, download_image_as_bytes(drive_service, file["id"])
         )
         row = [
-            display_date,
+            date_serial,
             filename,
             parsed["OPEN"],
             parsed["HIGH"],
